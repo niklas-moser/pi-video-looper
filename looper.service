@@ -1,0 +1,12 @@
+[Unit]
+Description=Video looper with buttons + brightness
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/looper.py
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
