@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 import glob, os, signal, subprocess, time
 from gpiozero import Button, RotaryEncoder
 
