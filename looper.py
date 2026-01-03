@@ -62,11 +62,16 @@ def main():
     idx = 0
     p = start_gst(files[idx])
 
-    btn_next = Button(BTN_NEXT, pull_up=True, bounce_time=0.05)
-    btn_prev = Button(BTN_PREV, pull_up=True, bounce_time=0.05)
-    enc = RotaryEncoder(ENC_A, ENC_B, max_steps=0)
+    btn_next = btn_prev = enc = None
+    try:
+        btn_next = Button(BTN_NEXT, pull_up=True, bounce_time=0.05)
+        btn_prev = Button(BTN_PREV, pull_up=True, bounce_time=0.05)
+        enc = RotaryEncoder(ENC_A, ENC_B, max_steps=0)
+        print("GPIO controls initialized")
+    except Exception as e:
+        print(f"GPIO init failed: {e}. Running video playback only.")
 
-    last_steps = enc.steps
+    last_steps = enc.steps if enc else 0
 
     def load(i):
         nonlocal idx, p, files
@@ -77,17 +82,20 @@ def main():
         stop_proc(p)
         p = start_gst(files[idx])
 
-    btn_next.when_pressed = lambda: load(idx + 1)
-    btn_prev.when_pressed = lambda: load(idx - 1)
+    if btn_next:
+        btn_next.when_pressed = lambda: load(idx + 1)
+    if btn_prev:
+        btn_prev.when_pressed = lambda: load(idx - 1)
 
     while True:
         # Encoder controls brightness
-        steps = enc.steps
-        if steps != last_steps and bl_path:
-            delta = steps - last_steps
-            last_steps = steps
-            cur_b = cur_b + delta * 8  # step size
-            set_brightness(bl_path, cur_b, maxv)
+        if enc:
+            steps = enc.steps
+            if steps != last_steps and bl_path:
+                delta = steps - last_steps
+                last_steps = steps
+                cur_b = cur_b + delta * 8  # step size
+                set_brightness(bl_path, cur_b, maxv)
         # If video ends for any reason, restart same file
         if p.poll() is not None:
             p = start_gst(files[idx])
