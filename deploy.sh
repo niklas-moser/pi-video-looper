@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOCAL_DIR="/home/niklas/pi-video-looper"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+LOCAL_DIR="${SCRIPT_DIR}"
 LOCAL_BIN_DIR="/usr/local/bin/looper.py"
 SERVICE_SRC="${LOCAL_DIR}/looper.service"
 SERVICE_DST="/etc/systemd/system/looper.service"
+
+# Ensure sources exist before installing
+if [ ! -f "${LOCAL_DIR}/looper.py" ]; then
+	echo "looper.py not found at ${LOCAL_DIR}. Is the repo path correct?" >&2
+	exit 1
+fi
+if [ ! -f "${SERVICE_SRC}" ]; then
+	echo "looper.service not found at ${SERVICE_SRC}." >&2
+	exit 1
+fi
 
 # Install system dependencies needed by looper.py and GStreamer pipeline
 sudo apt-get update
