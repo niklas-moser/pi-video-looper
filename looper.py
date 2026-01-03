@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 import glob, os, signal, subprocess, time
-from pathlib import Path
 from gpiozero import Button, RotaryEncoder
 
 VIDEO_DIR = "/media/videos"
@@ -11,7 +10,6 @@ BTN_NEXT = 17
 BTN_PREV = 27
 ENC_A = 23
 ENC_B = 24
-ROTATE = os.environ.get("LOOPER_ROTATE", "").strip()
 
 def pick_backlight():
     b = glob.glob(BRIGHTNESS_GLOB)
@@ -33,12 +31,13 @@ def list_videos():
     return sorted(files)
 
 def start_gst(filepath):
-    uri = Path(filepath).absolute().as_uri()
-    # Let playbin pick demux/decoders; render via KMS; optional rotation; drop audio
-    video_sink = "video-sink=kmssink"
-    if ROTATE:
-        video_sink = f"video-sink=videoflip method={ROTATE} ! kmssink"
-    cmd = ["gst-launch-1.0", "-q", "playbin", f"uri={uri}", video_sink, "audio-sink=fakesink"]
+    # Hardware decode H.264 via v4l2h264dec; render via KMS
+    cmd = [
+        "gst-launch-1.0", "-q",
+        "filesrc", f"location={filepath}", "!", "qtdemux", "name=demux",
+        "demux.video_0", "!", "h264parse", "!", "v4l2h264dec", "!",
+        "videoconvert", "!", "kmssink"
+    ]
     return subprocess.Popen(cmd, preexec_fn=os.setsid)
 
 def stop_proc(p):
