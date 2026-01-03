@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import glob, os, signal, subprocess, time
+from pathlib import Path
 from gpiozero import Button, RotaryEncoder
 
 VIDEO_DIR = "/media/videos"
@@ -31,12 +32,11 @@ def list_videos():
     return sorted(files)
 
 def start_gst(filepath):
-    # Hardware decode H.264 via v4l2h264dec; render via KMS
+    uri = Path(filepath).absolute().as_uri()
+    # Let playbin pick demux/decoders; render via KMS, drop audio
     cmd = [
         "gst-launch-1.0", "-q",
-        "filesrc", f"location={filepath}", "!", "qtdemux", "name=demux",
-        "demux.video_0", "!", "h264parse", "!", "v4l2h264dec", "!",
-        "videoconvert", "!", "kmssink"
+        "playbin", f"uri={uri}", "video-sink=kmssink", "audio-sink=fakesink"
     ]
     return subprocess.Popen(cmd, preexec_fn=os.setsid)
 
