@@ -11,6 +11,7 @@ BTN_NEXT = 17
 BTN_PREV = 27
 ENC_A = 23
 ENC_B = 24
+ROTATE = os.environ.get("LOOPER_ROTATE", "").strip()
 
 def pick_backlight():
     b = glob.glob(BRIGHTNESS_GLOB)
@@ -33,11 +34,11 @@ def list_videos():
 
 def start_gst(filepath):
     uri = Path(filepath).absolute().as_uri()
-    # Let playbin pick demux/decoders; render via KMS, drop audio
-    cmd = [
-        "gst-launch-1.0", "-q",
-        "playbin", f"uri={uri}", "video-sink=kmssink", "audio-sink=fakesink"
-    ]
+    # Let playbin pick demux/decoders; render via KMS; optional rotation; drop audio
+    video_sink = "video-sink=kmssink"
+    if ROTATE:
+        video_sink = f"video-sink=videoflip method={ROTATE} ! kmssink"
+    cmd = ["gst-launch-1.0", "-q", "playbin", f"uri={uri}", video_sink, "audio-sink=fakesink"]
     return subprocess.Popen(cmd, preexec_fn=os.setsid)
 
 def stop_proc(p):
