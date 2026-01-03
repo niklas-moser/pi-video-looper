@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/looper.py
+ExecStart=python3 /usr/local/bin/looper.py
 Restart=always
 RestartSec=1
 
