@@ -15,6 +15,7 @@ MAX_GLOB = "/sys/class/backlight/*/max_brightness"
 BTN_CONTROL = 17
 ENC_A = 23
 ENC_B = 24
+ENC_BTN = 27  # Encoder button (push to power off)
 LONG_PRESS_TIME = 1.0  # seconds
 
 # After stopping playback, wait a moment so the decoder/sink can release resources.
@@ -95,6 +96,7 @@ def main():
     button_press_time = None
     btn = None
     enc = None
+    enc_btn = None
 
     # Button requests are handled by the main loop only (prevents races/double-starts).
     lock = threading.Lock()
@@ -103,11 +105,13 @@ def main():
     try:
         btn = Button(BTN_CONTROL, pull_up=True, bounce_time=0.05)
         enc = RotaryEncoder(ENC_A, ENC_B, max_steps=0)
+        enc_btn = Button(ENC_BTN, pull_up=True, bounce_time=0.05)
         print("GPIO controls initialized")
     except Exception as e:
         print(f"GPIO init failed: {e}. Running video playback only.")
         btn = None
         enc = None
+        enc_btn = None
 
     last_steps = enc.steps if enc else 0
 
@@ -132,9 +136,18 @@ def main():
         else:
             request_switch(+1)  # Short press: next
 
+    def on_enc_btn_pressed():
+        # Power off the Pi when encoder button is pressed
+        print("Encoder button pressed - powering off...")
+        stop_proc(p)
+        subprocess.run(["sudo", "poweroff"])
+
     if btn:
         btn.when_pressed = on_btn_pressed
         btn.when_released = on_btn_released
+
+    if enc_btn:
+        enc_btn.when_pressed = on_enc_btn_pressed
 
     while True:
         # Encoder controls brightness
