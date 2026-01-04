@@ -47,6 +47,9 @@ def stop_proc(p):
             p.wait(timeout=2)
         except subprocess.TimeoutExpired:
             os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+            p.wait()  # Wait for SIGKILL to complete
+    # Give the hardware decoder time to release video memory
+    time.sleep(0.3)
 
 def main():
     bl_path, max_path = pick_backlight()
