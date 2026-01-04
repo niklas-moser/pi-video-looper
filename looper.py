@@ -1,5 +1,11 @@
 #!/usr/bin/python3
-import glob, os, signal, subprocess, time
+import glob
+import os
+import signal
+import subprocess
+import time
+import threading
+
 from gpiozero import Button, RotaryEncoder
 
 VIDEO_DIR = "/media/videos"
@@ -11,6 +17,11 @@ ENC_A = 23
 ENC_B = 24
 LONG_PRESS_TIME = 1.0  # seconds
 
+# After stopping playback, wait a moment so the decoder/sink can release resources.
+# If you still see flaky behavior, try 2.0–5.0 seconds.
+STOP_DELAY_S = 1.0
+
+
 def pick_backlight():
     b = glob.glob(BRIGHTNESS_GLOB)
     m = glob.glob(MAX_GLOB)
@@ -19,26 +30,42 @@ def pick_backlight():
     # Use the first backlight device found
     return b[0], m[0]
 
+
 def set_brightness(path, value, maxv):
     v = max(0, min(int(value), int(maxv)))
     with open(path, "w") as f:
         f.write(str(v))
 
+
 def list_videos():
     files = []
-    for ext in ("*.mp4","*.mkv","*.mov"):
+    for ext in ("*.mp4", "*.mkv", "*.mov"):
         files += glob.glob(os.path.join(VIDEO_DIR, ext))
     return sorted(files)
+
 
 def start_gst(filepath):
     # Hardware decode H.264 via v4l2h264dec; render via KMS
     cmd = [
-        "gst-launch-1.0", "-q",
-        "filesrc", f"location={filepath}", "!", "qtdemux", "name=demux",
-        "demux.video_0", "!", "h264parse", "!", "v4l2h264dec", "!",
-        "videoconvert", "!", "kmssink"
+        "gst-launch-1.0",
+        "-q",
+        "filesrc",
+        f"location={filepath}",
+        "!",
+        "qtdemux",
+        "name=demux",
+        "demux.video_0",
+        "!",
+        "h264parse",
+        "!",
+        "v4l2h264dec",
+        "!",
+        "videoconvert",
+        "!",
+        "kmssink",
     ]
     return subprocess.Popen(cmd, preexec_fn=os.setsid)
+
 
 def stop_proc(p):
     if p and p.poll() is None:
@@ -48,8 +75,8 @@ def stop_proc(p):
         except subprocess.TimeoutExpired:
             os.killpg(os.getpgid(p.pid), signal.SIGKILL)
             p.wait()  # Wait for SIGKILL to complete
-    # Give the hardware decoder time to release video memory
-    time.sleep(0.3)
+    time.sleep(STOP_DELAY_S)
+
 
 def main():
     bl_path, max_path = pick_backlight()
@@ -65,8 +92,14 @@ def main():
     idx = 0
     p = start_gst(files[idx])
 
-    btn_next = btn_prev = enc = None
     button_press_time = None
+    btn = None
+    enc = None
+
+    # Button requests are handled by the main loop only (prevents races/double-starts).
+    lock = threading.Lock()
+    pending_delta = 0  # +N => next N, -N => previous N
+
     try:
         btn = Button(BTN_CONTROL, pull_up=True, bounce_time=0.05)
         enc = RotaryEncoder(ENC_A, ENC_B, max_steps=0)
@@ -74,17 +107,14 @@ def main():
     except Exception as e:
         print(f"GPIO init failed: {e}. Running video playback only.")
         btn = None
+        enc = None
 
     last_steps = enc.steps if enc else 0
 
-    def load(i):
-        nonlocal idx, p, files
-        files = list_videos()
-        if not files:
-            return
-        idx = i % len(files)
-        stop_proc(p)
-        p = start_gst(files[idx])
+    def request_switch(delta):
+        nonlocal pending_delta
+        with lock:
+            pending_delta += int(delta)
 
     def on_btn_pressed():
         nonlocal button_press_time
@@ -92,13 +122,15 @@ def main():
 
     def on_btn_released():
         nonlocal button_press_time
-        if button_press_time is not None:
-            press_duration = time.time() - button_press_time
-            if press_duration >= LONG_PRESS_TIME:
-                load(idx - 1)  # Long press: previous
-            else:
-                load(idx + 1)  # Short press: next
-            button_press_time = None
+        if button_press_time is None:
+            return
+        press_duration = time.time() - button_press_time
+        button_press_time = None
+
+        if press_duration >= LONG_PRESS_TIME:
+            request_switch(-1)  # Long press: previous
+        else:
+            request_switch(+1)  # Short press: next
 
     if btn:
         btn.when_pressed = on_btn_pressed
@@ -113,10 +145,25 @@ def main():
                 last_steps = steps
                 cur_b = cur_b + delta * 8  # step size
                 set_brightness(bl_path, cur_b, maxv)
+
+        # Apply any pending button-requested switches (main loop only)
+        with lock:
+            delta = pending_delta
+            pending_delta = 0
+
+        if delta != 0:
+            files = list_videos()
+            if files:
+                idx = (idx + delta) % len(files)
+                stop_proc(p)
+                p = start_gst(files[idx])
+
         # If video ends for any reason, restart same file
-        if p.poll() is not None:
+        if p and p.poll() is not None:
             p = start_gst(files[idx])
+
         time.sleep(0.02)
+
 
 if __name__ == "__main__":
     main()
