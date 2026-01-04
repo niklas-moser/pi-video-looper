@@ -6,10 +6,10 @@ VIDEO_DIR = "/media/videos"
 BRIGHTNESS_GLOB = "/sys/class/backlight/*/brightness"
 MAX_GLOB = "/sys/class/backlight/*/max_brightness"
 
-BTN_NEXT = 17
-BTN_PREV = 27
+BTN_CONTROL = 17
 ENC_A = 23
 ENC_B = 24
+LONG_PRESS_TIME = 1.0  # seconds
 
 def pick_backlight():
     b = glob.glob(BRIGHTNESS_GLOB)
@@ -63,13 +63,14 @@ def main():
     p = start_gst(files[idx])
 
     btn_next = btn_prev = enc = None
+    button_press_time = None
     try:
-        btn_next = Button(BTN_NEXT, pull_up=True, bounce_time=0.05)
-        btn_prev = Button(BTN_PREV, pull_up=True, bounce_time=0.05)
+        btn = Button(BTN_CONTROL, pull_up=True, bounce_time=0.05)
         enc = RotaryEncoder(ENC_A, ENC_B, max_steps=0)
         print("GPIO controls initialized")
     except Exception as e:
         print(f"GPIO init failed: {e}. Running video playback only.")
+        btn = None
 
     last_steps = enc.steps if enc else 0
 
@@ -82,10 +83,23 @@ def main():
         stop_proc(p)
         p = start_gst(files[idx])
 
-    if btn_next:
-        btn_next.when_pressed = lambda: load(idx + 1)
-    if btn_prev:
-        btn_prev.when_pressed = lambda: load(idx - 1)
+    def on_btn_pressed():
+        nonlocal button_press_time
+        button_press_time = time.time()
+
+    def on_btn_released():
+        nonlocal button_press_time
+        if button_press_time is not None:
+            press_duration = time.time() - button_press_time
+            if press_duration >= LONG_PRESS_TIME:
+                load(idx - 1)  # Long press: previous
+            else:
+                load(idx + 1)  # Short press: next
+            button_press_time = None
+
+    if btn:
+        btn.when_pressed = on_btn_pressed
+        btn.when_released = on_btn_released
 
     while True:
         # Encoder controls brightness
