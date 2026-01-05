@@ -37,6 +37,27 @@ What deploy does:
 - Copies `looper.py` to `/usr/local/bin/looper.py`
 - Installs systemd unit `looper.service` and enables/starts it
 
+### Allow passwordless poweroff
+`looper.py` calls `sudo poweroff` when you press the encoder button. To let it shut down cleanly without prompting for a password, add this sudoers rule:
+
+```bash
+sudo visudo
+# Then add (replace <user> with your login):
+<user> ALL=(ALL) NOPASSWD: /usr/sbin/poweroff
+```
+
+Using `visudo` ensures the syntax is checked before saving so you do not accidentally break sudo access.
+
+### Optional GPU memory tweaks
+For smoother decoding on the Pi 1 B+, you can reserve a bit more RAM for VideoCore and its contiguous CMA heap. Edit `/boot/firmware/config.txt` and add:
+
+```ini
+gpu_mem=128
+cma=512
+```
+
+These values increase the GPU framebuffer budget and the contiguous memory allocator used by the video pipeline. The stock settings often work fine, so only change them if you see "out of memory" or display glitches. Remember to reboot after editing `config.txt`.
+
 ## Media preparation
 - Videos are read from `/media/videos`. Create and permission that directory so the service can read the media even when running as root:
 
