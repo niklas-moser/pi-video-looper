@@ -100,12 +100,27 @@ def main():
     cur_b = int(open(bl_path).read().strip()) if bl_path else 128
 
     categories = list_categories()
+    if not categories:
+        print("No categories found in", VIDEO_DIR)
+        while True:
+            time.sleep(5)
+
     cat_idx = 0
     current_cat = categories[cat_idx]
 
-    files = list_videos(current_cat)
+    # Find first category that has videos; otherwise wait
+    attempt = 0
+    files = []
+    while attempt < len(categories):
+        files = list_videos(current_cat)
+        if files:
+            break
+        cat_idx = (cat_idx + 1) % len(categories)
+        current_cat = categories[cat_idx]
+        attempt += 1
+
     if not files:
-        print("No videos found in", os.path.join(VIDEO_DIR, current_cat))
+        print("No videos found in any category under", VIDEO_DIR)
         while True:
             time.sleep(5)
 
@@ -121,8 +136,7 @@ def main():
     lock = threading.Lock()
     pending_delta = 0  # +N => next N, -N => previous N
     pending_cat_delta = 0  # +1 => next category, -1 => previous category
-    pending_single_tap = False
-    last_short_release = None
+    last_short_release = 0.0
 
     try:
         btn = Button(BTN_CONTROL, pull_up=True, bounce_time=0.05)
@@ -156,16 +170,14 @@ def main():
         if press_duration >= LONG_PRESS_TIME:
             request_switch(-1)  # Long press: previous
         else:
-            # Short press: detect double-tap within window to switch category
+            # Short press: immediate next; second short within window switches category
             now = time.time()
             with lock:
-                if pending_single_tap and last_short_release and (now - last_short_release) <= DOUBLE_PRESS_WINDOW:
-                    pending_single_tap = False
-                    last_short_release = None
+                if last_short_release and (now - last_short_release) <= DOUBLE_PRESS_WINDOW:
                     pending_cat_delta += 1
                 else:
-                    pending_single_tap = True
-                    last_short_release = now
+                    pending_delta += 1
+                last_short_release = now
 
     def on_enc_btn_pressed():
         # Power off the Pi when encoder button is pressed
@@ -192,12 +204,6 @@ def main():
 
         # Apply any pending button-requested switches (main loop only)
         with lock:
-            now = time.time()
-            if pending_single_tap and last_short_release and (now - last_short_release) > DOUBLE_PRESS_WINDOW:
-                pending_delta += 1  # confirm single short press
-                pending_single_tap = False
-                last_short_release = None
-
             delta = pending_delta
             pending_delta = 0
 
@@ -207,12 +213,21 @@ def main():
         if cat_delta != 0:
             categories = list_categories()
             if categories:
-                cat_idx = (cat_idx + cat_delta) % len(categories)
-                current_cat = categories[cat_idx]
-                files = list_videos(current_cat)
-                idx = 0
-                stop_proc(p)
-                p = start_gst(files[idx]) if files else None
+                tried = 0
+                while tried < len(categories):
+                    cat_idx = (cat_idx + cat_delta) % len(categories)
+                    current_cat = categories[cat_idx]
+                    files = list_videos(current_cat)
+                    if files:
+                        idx = 0
+                        stop_proc(p)
+                        p = start_gst(files[idx])
+                        break
+                    tried += 1
+                if tried >= len(categories):
+                    stop_proc(p)
+                    p = None
+                    print("No playable videos found in any category")
 
         if delta != 0:
             files = list_videos(current_cat)
@@ -220,6 +235,8 @@ def main():
                 idx = (idx + delta) % len(files)
                 stop_proc(p)
                 p = start_gst(files[idx])
+            else:
+                print(f"No videos in category '{current_cat}'")
 
         # If video ends for any reason, restart same file
         if p and p.poll() is not None:
