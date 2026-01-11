@@ -136,7 +136,7 @@ def main():
     lock = threading.Lock()
     pending_delta = 0  # +N => next N, -N => previous N
     pending_cat_delta = 0  # +1 => next category, -1 => previous category
-    last_short_release = 0.0
+    single_timer = None
 
     try:
         btn = Button(BTN_CONTROL, pull_up=True, bounce_time=0.05)
@@ -156,12 +156,18 @@ def main():
         with lock:
             pending_delta += int(delta)
 
+    def queue_single_press():
+        nonlocal pending_delta, single_timer
+        with lock:
+            pending_delta += 1
+            single_timer = None
+
     def on_btn_pressed():
         nonlocal button_press_time
         button_press_time = time.time()
 
     def on_btn_released():
-        nonlocal button_press_time, pending_delta, pending_cat_delta, last_short_release
+        nonlocal button_press_time, pending_delta, pending_cat_delta, single_timer
         if button_press_time is None:
             return
         press_duration = time.time() - button_press_time
@@ -170,14 +176,16 @@ def main():
         if press_duration >= LONG_PRESS_TIME:
             request_switch(-1)  # Long press: previous
         else:
-            # Short press: immediate next; second short within window switches category
-            now = time.time()
+            # Short press: start timer for single; second press within window switches category
             with lock:
-                if last_short_release and (now - last_short_release) <= DOUBLE_PRESS_WINDOW:
+                if single_timer and single_timer.is_alive():
+                    single_timer.cancel()
+                    single_timer = None
                     pending_cat_delta += 1
                 else:
-                    pending_delta += 1
-                last_short_release = now
+                    single_timer = threading.Timer(DOUBLE_PRESS_WINDOW, queue_single_press)
+                    single_timer.daemon = True
+                    single_timer.start()
 
     def on_enc_btn_pressed():
         # Power off the Pi when encoder button is pressed
