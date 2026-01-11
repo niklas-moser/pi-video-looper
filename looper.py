@@ -161,7 +161,7 @@ def main():
         button_press_time = time.time()
 
     def on_btn_released():
-        nonlocal button_press_time
+        nonlocal button_press_time, pending_delta, pending_cat_delta, last_short_release
         if button_press_time is None:
             return
         press_duration = time.time() - button_press_time
