@@ -9,6 +9,7 @@ import threading
 from gpiozero import Button, RotaryEncoder
 
 VIDEO_DIR = "/media/videos"
+DOUBLE_PRESS_WINDOW = 0.35  # seconds for detecting double-tap on BTN_CONTROL
 BRIGHTNESS_GLOB = "/sys/class/backlight/*/brightness"
 MAX_GLOB = "/sys/class/backlight/*/max_brightness"
 
@@ -38,10 +39,24 @@ def set_brightness(path, value, maxv):
         f.write(str(v))
 
 
-def list_videos():
+def list_categories():
+    # Immediate subdirectories under VIDEO_DIR define categories; include root if none exist
+    subs = []
+    try:
+        for entry in sorted(os.listdir(VIDEO_DIR)):
+            full = os.path.join(VIDEO_DIR, entry)
+            if os.path.isdir(full):
+                subs.append(entry)
+    except FileNotFoundError:
+        pass
+    return subs if subs else [""]
+
+
+def list_videos(category):
+    base = os.path.join(VIDEO_DIR, category) if category else VIDEO_DIR
     files = []
     for ext in ("*.mp4", "*.mkv", "*.mov"):
-        files += glob.glob(os.path.join(VIDEO_DIR, ext))
+        files += glob.glob(os.path.join(base, ext))
     return sorted(files)
 
 
@@ -84,9 +99,13 @@ def main():
     maxv = int(open(max_path).read().strip()) if max_path else 255
     cur_b = int(open(bl_path).read().strip()) if bl_path else 128
 
-    files = list_videos()
+    categories = list_categories()
+    cat_idx = 0
+    current_cat = categories[cat_idx]
+
+    files = list_videos(current_cat)
     if not files:
-        print("No videos found in", VIDEO_DIR)
+        print("No videos found in", os.path.join(VIDEO_DIR, current_cat))
         while True:
             time.sleep(5)
 
@@ -101,6 +120,9 @@ def main():
     # Button requests are handled by the main loop only (prevents races/double-starts).
     lock = threading.Lock()
     pending_delta = 0  # +N => next N, -N => previous N
+    pending_cat_delta = 0  # +1 => next category, -1 => previous category
+    pending_single_tap = False
+    last_short_release = None
 
     try:
         btn = Button(BTN_CONTROL, pull_up=True, bounce_time=0.05)
@@ -134,7 +156,16 @@ def main():
         if press_duration >= LONG_PRESS_TIME:
             request_switch(-1)  # Long press: previous
         else:
-            request_switch(+1)  # Short press: next
+            # Short press: detect double-tap within window to switch category
+            now = time.time()
+            with lock:
+                if pending_single_tap and last_short_release and (now - last_short_release) <= DOUBLE_PRESS_WINDOW:
+                    pending_single_tap = False
+                    last_short_release = None
+                    pending_cat_delta += 1
+                else:
+                    pending_single_tap = True
+                    last_short_release = now
 
     def on_enc_btn_pressed():
         # Power off the Pi when encoder button is pressed
@@ -161,11 +192,30 @@ def main():
 
         # Apply any pending button-requested switches (main loop only)
         with lock:
+            now = time.time()
+            if pending_single_tap and last_short_release and (now - last_short_release) > DOUBLE_PRESS_WINDOW:
+                pending_delta += 1  # confirm single short press
+                pending_single_tap = False
+                last_short_release = None
+
             delta = pending_delta
             pending_delta = 0
 
+            cat_delta = pending_cat_delta
+            pending_cat_delta = 0
+
+        if cat_delta != 0:
+            categories = list_categories()
+            if categories:
+                cat_idx = (cat_idx + cat_delta) % len(categories)
+                current_cat = categories[cat_idx]
+                files = list_videos(current_cat)
+                idx = 0
+                stop_proc(p)
+                p = start_gst(files[idx]) if files else None
+
         if delta != 0:
-            files = list_videos()
+            files = list_videos(current_cat)
             if files:
                 idx = (idx + delta) % len(files)
                 stop_proc(p)
