@@ -1,6 +1,6 @@
 # pi-video-looper
 
-Simple video looper for Raspberry Pi 1 B+ driving the Raspberry Pi Display 2. It plays a folder of videos on repeat, lets you switch clips with an arcade button, adjust screen brightness with a rotary encoder, and power off with an encoder press. A systemd service keeps playback running after boot.
+Simple video looper for Raspberry Pi 1 B+ driving the Raspberry Pi Display 2. It plays a folder of videos on repeat, lets you switch clips with a button press, adjust screen brightness with a rotary encoder, and power off with an encoder press. A systemd service keeps playback running after boot.
 
 ## Hardware
 - Raspberry Pi 1 B+
