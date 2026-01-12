@@ -1,6 +1,22 @@
 # pi-video-looper
 
+<img src="assets/PXL_20260112_130830325.jpg" alt="Showcase" width="480">
+
 Simple video looper for Raspberry Pi 1 B+ driving the Raspberry Pi Display 2. It plays a folder of videos on repeat, lets you switch clips with a button press, adjust screen brightness with a rotary encoder, and power off with an encoder press. A systemd service keeps playback running after boot.
+
+## Table of contents
+- [Hardware](#hardware)
+	- [Wiring (BCM pin numbers)](#wiring-bcm-pin-numbers)
+	- [Display](#display)
+- [Software prerequisites](#software-prerequisites)
+- [Install](#install)
+- [Allow passwordless poweroff](#allow-passwordless-poweroff)
+- [Optional GPU memory tweaks](#optional-gpu-memory-tweaks)
+- [Media preparation](#media-preparation)
+- [Why H.264 and hardware acceleration](#why-h264-and-hardware-acceleration)
+- [Controls](#controls)
+- [How it works](#how-it-works)
+- [Service management](#service-management)
 
 ## Hardware
 - Raspberry Pi 1 B+
@@ -13,7 +29,7 @@ Simple video looper for Raspberry Pi 1 B+ driving the Raspberry Pi Display 2. It
 - Encoder A: GPIO 23
 - Encoder B: GPIO 24
 - Encoder button: GPIO 27 (press to power off)
-- Arcade button: GPIO 17 (short press = next video, long press ≥1s = previous video)
+- Arcade button: GPIO 17 (short press = next video, long press ≥1s = previous video, double press = change subdirectory)
 - Common grounds to Pi GND; encoder VCC to 3.3V
 
 ### Display
@@ -69,6 +85,7 @@ sudo chmod 775 /media/videos
 
 Those two chmod/chown steps make the mount writable for everyday SSH/SCP transfers while still letting the `looper.service` process (running as root) read the files. Adjust the owner or group if you share the directory with other users.
 
+- Within `/media/videos` you can create subdirectories to categories videos, e.g. cats or dogs
 - Supported extensions: mp4, mkv, mov (see `looper.py`).
 - Encode your videos as H.264
 
@@ -81,7 +98,7 @@ Those two chmod/chown steps make the mount writable for everyday SSH/SCP transfe
 
 
 ## Controls
-- Arcade button (GPIO 17): short press → next video; long press (≥1s) → previous video
+- Button press (GPIO 17): short press → next video; long press (≥1s) → previous video; fast double press → change subdirectory within `/media/videos`
 - Encoder rotate: change LCD backlight brightness via `/sys/class/backlight/*`
 - Encoder press (GPIO 27): stop playback and `sudo poweroff`
 - Playback auto-restarts if a video ends or the process exits
@@ -94,6 +111,6 @@ Those two chmod/chown steps make the mount writable for everyday SSH/SCP transfe
 ## Service management
 - Check status: `systemctl status looper.service`
 - View logs: `journalctl -u looper.service -f`
-- Restart after adding new videos or changing wiring: `sudo systemctl restart looper.service`
+- Restart after adding new videos or changing wiring: `sudo systemctl restart looper.service` or simply call `deploy.sh`
 
 
