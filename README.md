@@ -1,6 +1,6 @@
 # pi-video-looper
 
-<img src="assets/PXL_20260112_130830325.jpg" alt="Showcase" width="480">
+<img src="assets/PXL_20260113_152318988~3.jpg" alt="Showcase" width="480">
 
 Simple video looper for Raspberry Pi 1 B+ driving the Raspberry Pi Display 2. It plays a folder of videos on repeat, lets you switch clips with a button press, adjust screen brightness with a rotary encoder, and power off with an encoder press. It also supports videos sorted in subdirectories letting you switch between the subdirectories with a double button press. A systemd service starts the python script automatically after boot.
 
