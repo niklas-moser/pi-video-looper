@@ -17,6 +17,7 @@ Simple video looper for Raspberry Pi 1 B+ driving the Raspberry Pi Display 2. It
     - [How it works](#how-it-works)
 - [Why H.264 and hardware acceleration](#why-h264-and-hardware-acceleration)
 - [Controls](#controls)
+- [Future work](#future-work)
 - [Service management](#service-management)
 
 ## Hardware
@@ -90,9 +91,9 @@ Those two chmod/chown steps make the mount writable for everyday SSH/SCP transfe
 - Supported extensions: mp4, mkv, mov (see `looper.py`).
 - Encode your videos as H.264
 
-### Automatic video encoding (preferably on a faster host PC)
+### Automatic video encoding
+- Preferably run this on a faster host PC, then copy the outputs to the Pi, as this is rather compute intensive
 - Use case: batch-convert source clips to Pi-friendly H.264 and pre-build ~30-minute looped outputs
-- As this is rather compute intense I recommend doing this on a faster host PC and copy it to the Pi later.
 - I am using 30 min looped videos, as the Pi has a black screen for about 2 seconds every time it loops a video, as it empties the video pipeline and reloads it. Therefore I am having this effect only every 30 minutes and can use this as a timer.
 - The script uses `ffmpeg` and `ffprobe`.
 - What it does:
@@ -121,6 +122,11 @@ Those two chmod/chown steps make the mount writable for everyday SSH/SCP transfe
 - Button press (GPIO 17): short press → next video; long press (≥1s) → previous video; fast double press → change subdirectory within `/media/videos`
 - Encoder rotate: change LCD backlight brightness via `/sys/class/backlight/*`
 - Encoder press (GPIO 27): stop playback and `sudo poweroff`
+
+
+## Future work
+- Add audio support
+- Remember last played video and start with this video after boot
 
 
 ## Service management
